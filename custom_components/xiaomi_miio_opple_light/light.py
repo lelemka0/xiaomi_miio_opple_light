@@ -21,17 +21,23 @@ from homeassistant.const import (
     CONF_NAME,
     CONF_HOST,
     CONF_TOKEN,
-    ATTR_ENTITY_ID
+    ATTR_ENTITY_ID,
+    CONF_SCAN_INTERVAL
 )
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
+from homeassistant.helpers.event import async_track_time_interval
 
 from miio import Device, DeviceException
 from math import ceil
+from datetime import timedelta
 
 DOMAIN = "xiaomi_miio_opple_light"
 DATA_KEY = 'light.xiaomi_miio_opple_light'
+
+MIN_SCAN_INTERVAL = timedelta(seconds=5)
+DEFAULT_SCAN_INTERVAL = timedelta(seconds=10)
 
 CONF_MIN_BRIGHTNESS = 'min_brightness'
 CONF_MAX_BRIGHTNESS = 'max_brightness'
@@ -47,16 +53,18 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
     vol.Required(CONF_NAME): cv.string,
     vol.Required(CONF_HOST): cv.string,
     vol.Required(CONF_TOKEN): cv.string,
+    vol.Optional(CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL):
+        vol.All(cv.time_period, vol.Clamp(min=MIN_SCAN_INTERVAL)),
     vol.Optional(CONF_MIN_BRIGHTNESS, default=7): cv.positive_int,
     vol.Optional(CONF_MAX_BRIGHTNESS, default=100): cv.positive_int,
     vol.Optional(CONF_MIN_MIREDS, default=3000): cv.positive_int,
     vol.Optional(CONF_MAX_MIREDS, default=5700): cv.positive_int
 })
 
-def setup_platform(
+async def async_setup_platform(
     hass: HomeAssistant,
     config: ConfigType,
-    add_entities: AddEntitiesCallback,
+    async_add_entities: AddEntitiesCallback,
     discovery_info: DiscoveryInfoType | None = None
 ) -> None:
     if DATA_KEY not in hass.data:
@@ -65,31 +73,39 @@ def setup_platform(
     name = config.get(CONF_NAME)
     host = config.get(CONF_HOST)
     token = config.get(CONF_TOKEN)
+    scan_interval = config.get(CONF_SCAN_INTERVAL)
     
     min_brightness = config.get(CONF_MIN_BRIGHTNESS)
     max_brightness = config.get(CONF_MAX_BRIGHTNESS)
     min_mireds = config.get(CONF_MIN_MIREDS)
     max_mireds = config.get(CONF_MAX_MIREDS)
     
-    hub = OppleLight(name, host, token, min_brightness, max_brightness, min_mireds, max_mireds)
+    hub = OppleLight(hass, name, host, token, scan_interval, min_brightness, max_brightness, min_mireds, max_mireds)
     hass.data[DATA_KEY][host] = hub
-    add_entities([hub], update_before_add=True)
+    async_add_entities([hub], update_before_add=True)
     
 
 class OppleLight(LightEntity):
 
     def __init__(
         self, 
+        hass: HomeAssistant,
         name: str, 
         host: str, 
         token: str, 
+        scan_interval: int,
         min_brightness: int, 
         max_brightness: int, 
         min_mireds: int, 
         max_mireds: int
     ) -> None:
+        self.hass = hass
         self._name = name
         self._device = Device(host, token)
+        
+        self._scan_interval = scan_interval
+        self._remove_update_interval = None
+        self._should_poll = False
         
         self._state = None
         self._brightness = None
@@ -102,6 +118,22 @@ class OppleLight(LightEntity):
         
         device_info = self._device.info()
         self._unique_id = "{}-{}".format(device_info.model, device_info.mac_address)
+        
+    async def async_added_to_hass(self) -> None:
+        """Start custom polling."""
+        self._remove_update_interval = async_track_time_interval(
+            self.hass, self.async_schedule_update, self._scan_interval
+        )
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Stop custom polling."""
+        self._remove_update_interval()
+
+    @callback
+    async def async_schedule_update(self, event_time=None):
+        """Update the entity."""
+        await self.async_update()
+        self.async_schedule_update_ha_state()
 
     async def async_update(self) -> None:
         try:
@@ -146,12 +178,16 @@ class OppleLight(LightEntity):
             result = await self.change_state('SetColorTemperature', [color_temp])
             if result:
                 self._color_temp = color_temp
+        
+        self.async_schedule_update_ha_state()
                 
     async def async_turn_off(self, **kwargs: Any) -> None:
         if self._state:
             result = await self.change_state("SetState", [False])
             if result:
                 self._state = False
+                
+        self.async_schedule_update_ha_state()
 
     @property
     def name(self) -> str:
@@ -166,6 +202,10 @@ class OppleLight(LightEntity):
     @property
     def supported_features(self) -> int:
         return DEFAULT_SUPPORTED_FEATURES
+        
+    @property
+    def should_poll(self):
+        return self._should_poll
 
     @property
     def is_on(self) -> bool | None:
