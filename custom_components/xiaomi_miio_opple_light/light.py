@@ -109,14 +109,16 @@ class OppleLight(LightEntity):
             self._state = BaseInfo[0]
             self._brightness = BaseInfo[2]
             self._color_temp = BaseInfo[1]
+            _LOGGER.debug('Sync_state. Result: %s', str(BaseInfo))
         except Exception:
             _LOGGER.error('Update state error.', exc_info=True)
             
     async def change_state(self, method: str, params: tuple) -> bool | None:
         try:
             res = self._device.raw_command(method, params)
+            _LOGGER.debug('Change_state for %s: %s. Result: %s', method, str(params), str(res))
             if (res[0] != 'ok'):
-                _LOGGER.error('Change_state failed for %s: %s', method, ' '.join(params))
+                _LOGGER.error('Change_state failed for %s: %s', method, str(params))
                 return False
             else:
                 return True
