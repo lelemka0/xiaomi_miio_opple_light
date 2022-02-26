@@ -1,0 +1,13 @@
+{
+  "domain": "xiaomi_miio_opple_light",
+  "name": "Xiaomi MIIO Opple Light",
+  "documentation": "https://github.com/lelemka0/xiaomi_miio_opple_light",
+  "issue_tracker": "https://github.com/lelemka0/xiaomi_miio_opple_light/issues",
+  "dependencies": [],
+  "codeowners": ["@lelemka0"],
+  "requirements": [
+    "construct==2.9.45",
+    "python-miio>=0.5.9.2"
+  ],
+  "version": "v1.0"
+}
