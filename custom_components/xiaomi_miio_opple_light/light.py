@@ -1,4 +1,6 @@
 """Platform for light integration."""
+from __future__ import annotations
+
 import logging
 
 import voluptuous as vol
@@ -24,7 +26,9 @@ from homeassistant.const import (
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
+
 from miio import Device, DeviceException
+from math import ceil
 
 DOMAIN = "xiaomi_miio_opple_light"
 DATA_KEY = 'light.xiaomi_miio_opple_light'
@@ -74,7 +78,16 @@ def setup_platform(
 
 class OppleLight(LightEntity):
 
-    def __init__(self, name, host, token, min_brightness, max_brightness, min_mireds, max_mireds):
+    def __init__(
+        self, 
+        name: str, 
+        host: str, 
+        token: str, 
+        min_brightness: int, 
+        max_brightness: int, 
+        min_mireds: int, 
+        max_mireds: int
+    ) -> None:
         self._name = name
         self._device = Device(host, token)
         
@@ -90,7 +103,7 @@ class OppleLight(LightEntity):
         device_info = self._device.info()
         self._unique_id = "{}-{}".format(device_info.model, device_info.mac_address)
 
-    async def async_update(self):
+    async def async_update(self) -> None:
         try:
             BaseInfo = self._device.raw_command('SyncBaseInfo', [])
             self._state = BaseInfo[0]
@@ -99,7 +112,7 @@ class OppleLight(LightEntity):
         except Exception:
             _LOGGER.error('Update state error.', exc_info=True)
             
-    async def change_state(self, method, params):
+    async def change_state(self, method: str, params: tuple) -> bool:
         try:
             res = self._device.raw_command(method, params)
             if (res[0] != 'ok'):
@@ -110,7 +123,7 @@ class OppleLight(LightEntity):
         except Exception:
             _LOGGER.error('Change_state error.', exc_info=True)
             
-    async def async_turn_on(self, **kwargs):
+    async def async_turn_on(self, **kwargs: Any) -> None:
         if not self._state:
             result = await self.change_state("SetState", [True])
             if result:
@@ -132,7 +145,7 @@ class OppleLight(LightEntity):
             if result:
                 self._color_temp = color_temp
                 
-    async def async_turn_off(self, **kwargs):
+    async def async_turn_off(self, **kwargs: Any) -> None:
         if self._state:
             result = await self.change_state("SetState", False)
             if result:
@@ -149,7 +162,7 @@ class OppleLight(LightEntity):
         return self._unique_id
         
     @property
-    def supported_features(self):
+    def supported_features(self) -> int:
         return DEFAULT_SUPPORTED_FEATURES
 
     @property
@@ -158,20 +171,17 @@ class OppleLight(LightEntity):
         return self._state
 
     @property
-    def brightness(self):
+    def brightness(self) -> int:
         return ceil( (self._brightness - self._min_brightness)*(255-1)/(self._max_brightness - self._min_brightness)+1 )
 
     @property
-    def color_temp(self):
+    def color_temp(self) -> int:
         return self._color_temp
         
     @property
-    def min_mireds(self):
+    def min_mireds(self) -> int:
         return self._min_mireds
 
     @property
-    def max_mireds(self):
+    def max_mireds(self) -> int:
         return self._max_mireds
-
-
-
