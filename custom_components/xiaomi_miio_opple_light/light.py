@@ -141,7 +141,7 @@ class OppleLight(LightEntity):
             mired = kwargs[ATTR_COLOR_TEMP]
             color_temp = mired
             _LOGGER.debug('Setting color temperature: %s mireds, %s ct', mired, color_temp)
-            result = await self.async_set_property('SetColorTemperature', [color_temp])
+            result = await self.change_state('SetColorTemperature', [color_temp])
             if result:
                 self._color_temp = color_temp
                 
