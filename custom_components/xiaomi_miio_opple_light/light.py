@@ -147,7 +147,7 @@ class OppleLight(LightEntity):
                 
     async def async_turn_off(self, **kwargs: Any) -> None:
         if self._state:
-            result = await self.change_state("SetState", False)
+            result = await self.change_state("SetState", [False])
             if result:
                 self._state = False
 
