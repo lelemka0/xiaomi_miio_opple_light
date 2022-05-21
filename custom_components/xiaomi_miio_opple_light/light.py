@@ -31,7 +31,7 @@ from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 from homeassistant.helpers.event import async_track_time_interval
 
 from miio import Device, DeviceException
-from math import ceil
+from math import ceil, floor
 from datetime import timedelta
 
 DOMAIN = "xiaomi_miio_opple_light"
@@ -42,8 +42,8 @@ DEFAULT_SCAN_INTERVAL = timedelta(seconds=10)
 
 CONF_MIN_BRIGHTNESS = 'min_brightness'
 CONF_MAX_BRIGHTNESS = 'max_brightness'
-CONF_MIN_MIREDS = 'min_mireds'
-CONF_MAX_MIREDS = 'max_mireds'
+CONF_MIN_COLOR_TEMPERATURE = 'min_color_temperature'
+CONF_MAX_COLOR_TEMPERATURE = 'max_color_temperature'
 
 DEFAULT_SUPPORTED_FEATURES = SUPPORT_BRIGHTNESS | SUPPORT_COLOR_TEMP
 
@@ -58,8 +58,8 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
         vol.All(cv.time_period, vol.Clamp(min=MIN_SCAN_INTERVAL)),
     vol.Optional(CONF_MIN_BRIGHTNESS, default=7): cv.positive_int,
     vol.Optional(CONF_MAX_BRIGHTNESS, default=100): cv.positive_int,
-    vol.Optional(CONF_MIN_MIREDS, default=3000): cv.positive_int,
-    vol.Optional(CONF_MAX_MIREDS, default=5700): cv.positive_int
+    vol.Optional(CONF_MIN_COLOR_TEMPERATURE, default=3000): cv.positive_int,
+    vol.Optional(CONF_MAX_COLOR_TEMPERATURE, default=5700): cv.positive_int
 })
 
 async def async_setup_platform(
@@ -78,10 +78,10 @@ async def async_setup_platform(
     
     min_brightness = config.get(CONF_MIN_BRIGHTNESS)
     max_brightness = config.get(CONF_MAX_BRIGHTNESS)
-    min_mireds = config.get(CONF_MIN_MIREDS)
-    max_mireds = config.get(CONF_MAX_MIREDS)
+    min_color_temperature = config.get(CONF_MIN_COLOR_TEMPERATURE)
+    max_color_temperature = config.get(CONF_MAX_COLOR_TEMPERATURE)
     
-    hub = OppleLight(hass, name, host, token, scan_interval, min_brightness, max_brightness, min_mireds, max_mireds)
+    hub = OppleLight(hass, name, host, token, scan_interval, min_brightness, max_brightness, min_color_temperature, max_color_temperature)
     hass.data[DATA_KEY][host] = hub
     async_add_entities([hub], update_before_add=True)
     
@@ -97,8 +97,8 @@ class OppleLight(LightEntity):
         scan_interval: int,
         min_brightness: int, 
         max_brightness: int, 
-        min_mireds: int, 
-        max_mireds: int
+        min_color_temperature: int, 
+        max_color_temperature: int
     ) -> None:
         self.hass = hass
         self._name = name
@@ -126,8 +126,8 @@ class OppleLight(LightEntity):
         
         self._min_brightness = min_brightness
         self._max_brightness = max_brightness
-        self._min_mireds = min_mireds
-        self._max_mireds = max_mireds
+        self._min_color_temperature = min_color_temperature
+        self._max_color_temperature = max_color_temperature
         
     async def async_added_to_hass(self) -> None:
         """Start custom polling."""
@@ -183,7 +183,7 @@ class OppleLight(LightEntity):
                 
         if self.supported_features & SUPPORT_COLOR_TEMP and ATTR_COLOR_TEMP in kwargs:
             mired = kwargs[ATTR_COLOR_TEMP]
-            color_temp = mired
+            color_temp = self.translate_mired(mired)
             _LOGGER.debug('Setting color temperature: %s mireds, %s ct', mired, color_temp)
             result = await self.change_state('SetColorTemperature', [color_temp])
             if result:
@@ -214,7 +214,7 @@ class OppleLight(LightEntity):
         return DEFAULT_SUPPORTED_FEATURES
         
     @property
-    def should_poll(self):
+    def should_poll(self) -> bool | None:
         return self._should_poll
 
     @property
@@ -228,12 +228,19 @@ class OppleLight(LightEntity):
 
     @property
     def color_temp(self) -> int:
-        return self._color_temp
+        return self.translate_mired(self._color_temp)
         
     @property
     def min_mireds(self) -> int:
-        return self._min_mireds
+        return self.translate_mired(self._max_color_temperature)
 
     @property
     def max_mireds(self) -> int:
-        return self._max_mireds
+        return self.translate_mired(self._min_color_temperature)
+
+    @staticmethod
+    def translate_mired(num) -> int:
+        try:
+            return floor(1000000 / num)
+        except (TypeError, ValueError, ZeroDivisionError):
+            return 153
