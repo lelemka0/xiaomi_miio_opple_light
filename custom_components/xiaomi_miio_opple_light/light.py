@@ -25,6 +25,7 @@ from homeassistant.const import (
     CONF_SCAN_INTERVAL
 )
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.exceptions import PlatformNotReady
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 from homeassistant.helpers.event import async_track_time_interval
@@ -101,8 +102,20 @@ class OppleLight(LightEntity):
     ) -> None:
         self.hass = hass
         self._name = name
-        self._device = Device(host, token)
-        
+
+        try:
+            self._device = Device(host, token)
+            device_info = self._device.info()
+            self._unique_id = "{}-{}".format(device_info.model, device_info.mac_address)
+            _LOGGER.info(
+                "%s %s detected",
+                device_info.firmware_version,
+                device_info.hardware_version,
+            )
+        except DeviceException as ex:
+            _LOGGER.error("Device unavailable or token incorrect: %s", ex)
+            raise PlatformNotReady
+
         self._scan_interval = scan_interval
         self._remove_update_interval = None
         self._should_poll = False
@@ -115,9 +128,6 @@ class OppleLight(LightEntity):
         self._max_brightness = max_brightness
         self._min_mireds = min_mireds
         self._max_mireds = max_mireds
-        
-        device_info = self._device.info()
-        self._unique_id = "{}-{}".format(device_info.model, device_info.mac_address)
         
     async def async_added_to_hass(self) -> None:
         """Start custom polling."""
