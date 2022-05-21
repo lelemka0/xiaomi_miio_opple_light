@@ -184,6 +184,10 @@ class OppleLight(LightEntity):
         if self.supported_features & SUPPORT_COLOR_TEMP and ATTR_COLOR_TEMP in kwargs:
             mired = kwargs[ATTR_COLOR_TEMP]
             color_temp = self.translate_mired(mired)
+            if color_temp < self._min_color_temperature:
+                color_temp = self._min_color_temperature
+            if color_temp > self._max_color_temperature:
+                color_temp = self._max_color_temperature
             _LOGGER.debug('Setting color temperature: %s mireds, %s ct', mired, color_temp)
             result = await self.change_state('SetColorTemperature', [color_temp])
             if result:
