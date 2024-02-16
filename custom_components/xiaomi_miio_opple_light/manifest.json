@@ -9,5 +9,5 @@
     "construct>=2.9.45",
     "python-miio>=0.5.9.2"
   ],
-  "version": "v1.0.0"
+  "version": "v1.0.1"
 }
